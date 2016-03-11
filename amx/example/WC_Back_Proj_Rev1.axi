@@ -7,6 +7,7 @@ PROGRAM_NAME='WC_Back_Proj,Rev 1'
 (*  Revamp for new module                                  *)
 (*                                                         *)
 (***********************************************************)
+// 2 panasonic 7700's both connected together using RS422
 DEFINE_DEVICE
 dvWCBackProjector	= 0:10:0 // Fellowship Sharp
 vdvWCBackProjector	= 33050:1:0 //Virtual Fellowship Projector
