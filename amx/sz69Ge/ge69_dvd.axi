@@ -23,33 +23,70 @@ char strDVDCode[][3] = {
 DEFINE_VARIABLE
 
 integer gblDvdPlayPauseSwitch = 0
+integer gblDVDPowerState
+long gTLDVDPolling[] = {500}  // DVD POLLING TIMELINE
 
-DEFINE_FUNCTION dvdPowerOff()
+DEFINE_FUNCTION updateDVDPowerState (integer pmState)
 {
-    // to prevent from damaging the dvd, we should stop it first, then
-    // poweroff
-    do_push(vdvTP, btnDVD[BTN_DVD_STOP])
-    wait 50
+    integer tpId
+
+    for (tpId = length_array(gDvTps); tpId >= 1; tpId--)
     {
-        do_push(vdvTP, btnDVD[BTN_DVD_POWEROFF])
+        if (gTpStatus[tpId] = TP_STATUS_OFF)
+            continue
     }
 }
 
+DEFINE_FUNCTION dvdPowerOff(integer tpId)
+{
+    // to prevent from damaging the dvd, we should stop it first, then
+    // poweroff
+    //fnQueueTheCommand(dvPJ, "strDVDCode[BTN_DVD_STOP],$0D")
+    //wait 50 fnQueueTheCommand(dvPJ, "strDVDCode[BTN_DVD_POWEROFF],$0D")
+
+    send_string dvDVD, "strDVDCode[BTN_DVD_STOP],$0D"
+    wait 50
+    {
+        send_string dvDVD, "strDVDCode[BTN_DVD_POWEROFF],$0D"
+    }
+
+    gblDVDPowerState = POWER_MAN_OFF
+}
+
+DEFINE_FUNCTION tpDVDBtnSync()
+{
+    [gDvTps, btnDVD[BTN_DVD_POWERON]] = (gblDVDPowerState == POWER_MAN_ON)
+    [gDvTps, btnDVD[BTN_DVD_POWEROFF]] = (gblDVDPowerState != POWER_MAN_ON)
+}
+
+
 DEFINE_MUTUALLY_EXCLUSIVE
-([vdvTP, btnDVD[BTN_DVD_POWERON]], [vdvTP, btnDVD[BTN_DVD_POWEROFF]])
+//([gDvTps, btnDVD[BTN_DVD_POWERON]], [gDvTps, btnDVD[BTN_DVD_POWEROFF]])
 
 DEFINE_EVENT
 
-BUTTON_EVENT[vdvTP, btnDVD]
+BUTTON_EVENT[gDvTps, btnDVD]
 {
     PUSH:
     {
         integer idxBtn
+        integer tpId
 
+        tpId   = get_last(gDvTps) 
         idxBtn = get_last(btnDVD)
-        ON[vdvTP, BUTTON.INPUT.CHANNEL]
+
         switch(idxBtn)
         {
+            case BTN_DVD_POWERON:
+            {
+                send_string dvDVD, "strDVDCode[BTN_DVD_POWERON],$0D"
+                gblDVDPowerState = POWER_MAN_ON
+            }
+            case BTN_DVD_POWEROFF:
+            {
+                send_string dvDVD, "strDVDCode[BTN_DVD_POWEROFF],$0D"
+                gblDVDPowerState = POWER_MAN_OFF
+            }
             case BTN_DVD_PLAY:
             {
                 if (gblDvdPlayPauseSwitch)

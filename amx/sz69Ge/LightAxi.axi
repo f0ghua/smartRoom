@@ -95,6 +95,9 @@ DEFINE_FUNCTION fnStatusDev(DEV vdvLight,nNumber,nChannel,nValue)
 			IF(nValue < 2)
 			{
 	    		// 继电器开关的状态
+	    		debug('lightAxi', 10, "'_sDevSts[',itoa(nNumber),'][',
+	    			itoa(vdvLight.NUMBER-nVirDevStart+1),'][',itoa(nChannel),'] = ',
+	    			itoa(nValue)")
 	    		_sDevSts[nNumber][vdvLight.NUMBER-nVirDevStart+1].nVal[nChannel] = nValue
 			}
 		}

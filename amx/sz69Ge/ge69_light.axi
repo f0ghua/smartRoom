@@ -2,6 +2,9 @@ PROGRAM_NAME='ge69_light'
 
 DEFINE_CONSTANT
 
+LIGHT_ON                = 1
+LIGHT_OFF               = 0
+
 // We use AVB-ABS module control two AVB-DIN-REL8-50 strong electrical
 // controlers, the controller' address are configured by AMX software
 AVBDIN_RELAY_M1ADDRESS  = 30
@@ -37,6 +40,7 @@ BTN_LIGHT_M2END     = BTN_LIGHT_M2L8
 LIGHT_M2_RELAYCNT   = (BTN_LIGHT_M2END - BTN_LIGHT_M2START + 1)
 
 BTN_LIGHT_MNEND     = BTN_LIGHT_M2END
+BTN_LIGHT_MAXNUM    = BTN_LIGHT_MNEND
 
 // Lights all on and all off
 BTN_LIGHT_ALL_ON    = 1
@@ -53,7 +57,7 @@ MAX_DIMLEVEL_VALUE  = 100
 
 DEFINE_VARIABLE
 
-integer btnLight[] = {
+integer btnLight[BTN_LIGHT_MAXNUM] = {
     101,    // strong electrical controller 1, circuit 1
     102,
     103,
@@ -118,6 +122,76 @@ char sceneRelayOffMapping[][2] = {
 
 char gblDimLevelValue[MAX_DIMLEVEL_NUMBER]
 
+
+DEFINE_MUTUALLY_EXCLUSIVE
+
+
+// Include AMX AVB-ABS module to control the AMX relays(AVB-DIN-REL8-50)
+#INCLUDE 'LightAxi'
+DEFINE_MODULE 'LightModule' uMod_Light(vdvAmxLight, dvAMXLight)
+
+DEFINE_FUNCTION fnLightOn(integer index)
+{
+    integer idxRelay, relayAddr
+
+    if (index <= BTN_LIGHT_M1END)
+    {
+        relayAddr = AVBDIN_RELAY_M1ADDRESS
+        idxRelay = index - BTN_LIGHT_M1START + 1
+    }
+    else
+    {
+        relayAddr = AVBDIN_RELAY_M2ADDRESS
+        idxRelay = index - BTN_LIGHT_M2START + 1
+    }
+
+    fnOn(vdvAMXLight, relayAddr, idxRelay)    
+}
+
+DEFINE_FUNCTION fnLightOff(integer index)
+{
+    integer idxRelay, relayAddr
+
+    if (index <= BTN_LIGHT_M1END)
+    {
+        relayAddr = AVBDIN_RELAY_M1ADDRESS
+        idxRelay = index - BTN_LIGHT_M1START + 1
+    }
+    else
+    {
+        relayAddr = AVBDIN_RELAY_M2ADDRESS
+        idxRelay = index - BTN_LIGHT_M2START + 1
+    }
+
+    fnOff(vdvAMXLight, relayAddr, idxRelay)
+}
+
+DEFINE_FUNCTION toggleAlights(integer state)
+{
+    integer i
+    
+    if (state == LIGHT_ON)
+    {
+        for (i = 1; i <= LIGHT_M1_RELAYCNT; i++)
+        fnOn(vdvAMXLight, AVBDIN_RELAY_M1ADDRESS, i)
+        for (i = 1; i <= LIGHT_M2_RELAYCNT; i++)
+        fnOn(vdvAMXLight, AVBDIN_RELAY_M2ADDRESS, i)
+
+        fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 90, 0)
+        updateLevelValue(btnDimLevel[1], 90)           
+    }
+    else
+    {
+        for (i = 1; i <= LIGHT_M1_RELAYCNT; i++)
+        fnOff(vdvAMXLight, AVBDIN_RELAY_M1ADDRESS, i)
+        for (i = 1; i <= LIGHT_M2_RELAYCNT; i++)
+        fnOff(vdvAMXLight, AVBDIN_RELAY_M2ADDRESS, i)
+
+        fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 0, 0)
+        updateLevelValue(btnDimLevel[1], 0)           
+    }
+}
+
 // inverse: inverse the light action of mapping request
 DEFINE_FUNCTION lightSceneAc(char map[][], integer sceneId, char lightOn)
 {
@@ -142,43 +216,76 @@ DEFINE_FUNCTION lightSceneAc(char map[][], integer sceneId, char lightOn)
 
         if (isExit)
         {
-
-            if (i <= LIGHT_M1_RELAYCNT)
-            {
-                relayAddr = AVBDIN_RELAY_M1ADDRESS
-                j = i
-            }
-            else
-            {
-                relayAddr = AVBDIN_RELAY_M2ADDRESS
-                j = i - LIGHT_M1_RELAYCNT
-            }
-
             if (lightOn == 1)
             {
-                fnOn(vdvAMXLight, relayAddr, j)
-                ON[vdvTP, btnLight[i]]     
-                ON[vdvTP, btnLightScene[sceneId]] 
+                fnLightOn(i)
             }
             else
             {
-                fnOff(vdvAMXLight, relayAddr, j)
-                OFF[vdvTP, btnLight[i]]
-                OFF[vdvTP, btnLightScene[sceneId]]
+                fnLightOff(i)
             }
         }
-    }                
+    }
 }
 
-DEFINE_MUTUALLY_EXCLUSIVE
+DEFINE_FUNCTION tpLightSceneOn(integer idx)
+{
+    lightSceneAc(sceneRelayOnMapping, idx, 1)
+    tpArrayOn(btnLightScene[idx])    
+}
 
-// Include AMX AVB-ABS module to control the AMX relays(AVB-DIN-REL8-50)
-#INCLUDE 'liteLightAxi'
-DEFINE_MODULE 'LightModule' uMod_Light(vdvAmxLight, dvAMXLight)
+// index: the light index of the button array
+// return: 0 - off, 1 - on
+DEFINE_FUNCTION integer fnLightStatus(integer index)
+{
+    integer idxRelay, relayAddr
+
+    if (index <= BTN_LIGHT_M1END)
+    {
+        relayAddr = AVBDIN_RELAY_M1ADDRESS
+        idxRelay = index - BTN_LIGHT_M1START + 1
+    }
+    else
+    {
+        relayAddr = AVBDIN_RELAY_M2ADDRESS
+        idxRelay = index - BTN_LIGHT_M2START + 1
+    }
+
+    return _sDevSts[relayAddr][1].nVal[idxRelay] 
+}
+
+
+DEFINE_FUNCTION tpLightBtnSync(tpId)
+{
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L1]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L2]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L2]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L3]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L3]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L4]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L4]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L5]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L5]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L6]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L6]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L7]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L7]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M1L8]] = _sDevSts[AVBDIN_RELAY_M1ADDRESS][1].nVal[BTN_LIGHT_M1L8]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L1]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L1-BTN_LIGHT_M2START+1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L2]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L2-BTN_LIGHT_M2START+1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L3]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L3-BTN_LIGHT_M2START+1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L4]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L4-BTN_LIGHT_M2START+1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L5]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L5-BTN_LIGHT_M2START+1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L6]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L6-BTN_LIGHT_M2START+1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L7]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L7-BTN_LIGHT_M2START+1]
+    [gDvTps[tpId], btnLight[BTN_LIGHT_M2L8]] = _sDevSts[AVBDIN_RELAY_M2ADDRESS][1].nVal[BTN_LIGHT_M2L8-BTN_LIGHT_M2START+1] 
+}
 
 DEFINE_EVENT
 
-BUTTON_EVENT[vdvTP, btnLight]
+DATA_EVENT[vdvAmxLight]
+{
+    ONLINE:
+    {
+        /* query light status, and update the light variables */
+    }
+}
+
+BUTTON_EVENT[gDvTps, btnLight]
 {
     PUSH:
     {
@@ -187,91 +294,71 @@ BUTTON_EVENT[vdvTP, btnLight]
         idxBtn = get_last(btnLight)
         select
         {
-            active (idxBtn >= BTN_LIGHT_M1START && 
-                idxBtn <= BTN_LIGHT_MNEND):
+            active (idxBtn >= BTN_LIGHT_M1START && idxBtn <= BTN_LIGHT_MNEND):
             {
-                integer addrModule
-                integer idxBase
-                integer idxRelay
-                
-                if (idxBtn <= BTN_LIGHT_M1END)
+
+                if (!fnLightStatus(idxBtn))
                 {
-                    addrModule = AVBDIN_RELAY_M1ADDRESS
-                    idxBase = BTN_LIGHT_M1START
+                    fnLightOn(idxBtn)
                 }
                 else
                 {
-                    addrModule = AVBDIN_RELAY_M2ADDRESS
-                    idxBase = BTN_LIGHT_M2START
+                    fnLightOff(idxBtn)
                 }
-                idxRelay = idxBtn - idxBase + 1
-
-                if (![vdvTP, BUTTON.INPUT.CHANNEL])
-                {
-                    fnOn(vdvAMXLight, addrModule, idxRelay)
-                }
-                else
-                {
-                    fnOff(vdvAMXLight, addrModule, idxRelay)
-                }
-
-                // The best method is indicating the button status according
-                // to light  operation feedback on the EVENT routing, but I
-                // don't know how...
-                [vdvTP, BUTTON.INPUT.CHANNEL] = ![vdvTP, BUTTON.INPUT.CHANNEL]
             }    
         }
     }
 }
 
-BUTTON_EVENT[vdvTP, btnLightScene]
+BUTTON_EVENT[gDvTps, btnLightScene]
 {
     PUSH:
     {
         integer idxBtn, i
-    
+        integer tpId
+
+        tpId   = get_last(gDvTps)    
         idxBtn = get_last(btnLightScene)
         switch(idxBtn)
         {
             case BTN_LIGHT_ALL_ON:
-            {
-                for (i = 1; i <= LIGHT_M1_RELAYCNT; i++)
-                    fnOn(vdvAMXLight, AVBDIN_RELAY_M1ADDRESS, i)
-                for (i = 1; i <= LIGHT_M2_RELAYCNT; i++)
-                    fnOn(vdvAMXLight, AVBDIN_RELAY_M2ADDRESS, i)
-                ON[vdvTP, btnLight]
-            }
+                toggleAlights(LIGHT_ON)
             case BTN_LIGHT_ALL_OFF:
+                toggleAlights(LIGHT_OFF)          
             case BTN_LIGHT_SCENE_2:
             {
-                for (i = 1; i <= LIGHT_M1_RELAYCNT; i++)
-                    fnOff(vdvAMXLight, AVBDIN_RELAY_M1ADDRESS, i)
-                for (i = 1; i <= LIGHT_M2_RELAYCNT; i++)
-                    fnOff(vdvAMXLight, AVBDIN_RELAY_M2ADDRESS, i)
-                OFF[vdvTP, btnLight]
-                // also close the dimmer
+                cancel_wait 'W_LSCENE2_DOOROFF'
                 fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 0, 0)
-                send_level vdvTP, btnDimLevel[1], 0
+                updateLevelValue(btnDimLevel[1], 0)
+                for (i = BTN_LIGHT_MAXNUM; i > 0; i--)
+                {
+                    if (i != BTN_LIGHT_M1L5) fnLightOff(i)
+                }
+                // wait 30s so that we have time to lock the door
+                wait 300 'W_LSCENE2_DOOROFF' fnLightOff(BTN_LIGHT_M1L5)
             }
             case BTN_LIGHT_SCENE_3:
                 // buttons with channel type should be defined here
-                if ([vdvTP, BUTTON.INPUT.CHANNEL] == 0)
+                if ([gDvTps[tpId], BUTTON.INPUT.CHANNEL] == 0)
                 {
                     lightSceneAc(sceneRelayOnMapping, idxBtn, 1)
+                    tpArrayOn(btnLightScene[idxBtn])
                 }
                 else
                 {
                     lightSceneAc(sceneRelayOffMapping, idxBtn, 0)
+                    tpArrayOff(btnLightScene[idxBtn])
                 }
             default:
             {
                 lightSceneAc(sceneRelayOnMapping, idxBtn, 1)
+                tpArrayOn(btnLightScene[idxBtn])
             }   
         }
     }
 }
 
-BUTTON_EVENT[vdvTP, btnDimLevel]
+BUTTON_EVENT[gDvTps, btnDimLevel]
 {
     RELEASE:
     {
@@ -281,9 +368,18 @@ BUTTON_EVENT[vdvTP, btnDimLevel]
 
         fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, i, gblDimLevelValue[i], 0)
     }
+    // The dimmer should be changed when drag the level
+    HOLD[1, REPEAT]:
+    {
+        integer i 
+
+        i = get_last(btnDimLevel)
+
+        fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, i, gblDimLevelValue[i], 0)
+    }
 }
 
-LEVEL_EVENT[vdvTP, btnDimLevel]
+LEVEL_EVENT[gDvTps, btnDimLevel]
 {
     integer i;
     
@@ -291,3 +387,5 @@ LEVEL_EVENT[vdvTP, btnDimLevel]
     
     gblDimLevelValue[i] = LEVEL.VALUE
 }
+
+DEFINE_PROGRAM

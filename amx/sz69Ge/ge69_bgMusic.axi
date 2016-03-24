@@ -3,7 +3,7 @@ PROGRAM_NAME='ge69_bgMusic'
 DEFINE_CONSTANT
 
 MIYUE_IPADDRESS     = '192.168.1.12'
-MIYUE_PORT          = "6785"
+MIYUE_PORT          = 6785
 
 MIYUE_CMD_PLAY      = 1
 MIYUE_CMD_PAUSE     = 2
@@ -14,6 +14,8 @@ MIYUE_CMD_VOLDOWN   = 6
 MIYUE_CMD_TOGPL     = 7     // toggle play and pause
 MIYUE_CMD_RESET     = 8
 
+MIYUE_CMD_LINK      = 9
+
 MIYUE_LEVEL_INDEX   = 5
 MAX_MYLEVEL_NUMBER  = 8
 MAX_MYLEVEL_VALUE   = 15    // MIYUE's volume max value is 15
@@ -22,9 +24,9 @@ ADCODE_STS_MIYUELINK    = 31    // address code for link status of MIYUE
 
 DEFINE_VARIABLE
 
-// PLAY, PAUSE, |<, >|, VOL+, VOL-, PLAY/PAUSE, FMT
+// PLAY, PAUSE, |<, >|, VOL+, VOL-, PLAY/PAUSE, FMT, LINK
 integer btnMiYue[] = {
-    401, 402, 403, 404, 405, 406, 407, 408
+    401, 402, 403, 404, 405, 406, 407, 408, 409
 }
 
 integer btnMYLevel[MAX_MYLEVEL_NUMBER] = {
@@ -38,23 +40,80 @@ integer btnMYLevel[MAX_MYLEVEL_NUMBER] = {
     318
 }
 
+char gMYBtnState[MAX_MYLEVEL_NUMBER]
 char gblMYLevelValue[MAX_MYLEVEL_NUMBER]
-char gblMiyueConnStatus = FALSE
+char gblMiyueConnStatus = 0
 
 DEFINE_FUNCTION miyueIpOpen()
 {
     if (gblMiyueConnStatus == 0)
     {
         //print(LOG_LEVEL_DEBUG, "call function IP_CLIENT_OPEN")
+        debug('bgMusic', 4, "'ip client open: lport=', itoa(dvMiYue.port), 
+            ', ip=', MIYUE_IPADDRESS, ', port=', itoa(MIYUE_PORT)")
         IP_CLIENT_OPEN(dvMiYue.port, MIYUE_IPADDRESS, MIYUE_PORT, IP_TCP)
     }
 }
 
 DEFINE_FUNCTION miyueIpClose()
 {
-    if (gblMiyueConnStatus == 1)
-        IP_CLIENT_CLOSE(dvMiYue.port)
+    IP_CLIENT_CLOSE(dvMiYue.port)
 }
+
+DEFINE_FUNCTION bgMuicCommand(integer cmdId)
+{
+    if (gblMiyueConnStatus == 1)
+    {
+        debug('bgMusic', 4, "'bgMuicCommand: cmdId = ', cmdId")
+        switch (cmdId)
+        {
+            case MIYUE_CMD_TOGPL: // play|pause, now use only 1 button
+            {
+                if (gMYBtnState[MIYUE_CMD_TOGPL] == 0)
+                {
+                    SEND_LEVEL vdvMiYue, 1, MIYUE_CMD_PLAY
+                    gMYBtnState[MIYUE_CMD_TOGPL] = 1
+                }
+                else
+                {
+                    SEND_LEVEL vdvMiYue, 1, MIYUE_CMD_PAUSE
+                    gMYBtnState[MIYUE_CMD_TOGPL] = 0
+                }
+            }
+            default:
+            {
+                SEND_LEVEL vdvMiYue, 1, cmdId
+            }
+
+        }
+    }
+    else
+    {
+        debug('bgMusic', 4, "'bgMuicCommand: no ip connection ESTABLISHED'")
+    }
+}
+
+DEFINE_FUNCTION integer setBgMusicVol(char vol)
+{
+    long v
+    char cmdStr[64]
+
+    if (vol > MAX_MYLEVEL_VALUE) return 0
+
+    v = type_cast(vol)
+    // volume is set at 20~27 bit
+    v = (v << 20)
+    // 30~31 bit control the play state, {1,1} means ignore
+    v = ($03 << 30) + v
+    
+    cmdStr = "'SET PLAYER_STAT {M:',itohex(v),',P:-1,EQ:-1,CM:-1}',13"
+    debug('bgMusic', 4, "'setBgMusicVol: cmd = ', cmdStr")
+
+    //fnQueueTheCommand(dvMiYue, "'SET PLAYER_STAT {M:', itoa(v), ',P:-1,EQ:-1,CM:-1}', $0D")
+    send_string dvMiYue, "'SET PLAYER_STAT {M:', itoa(v), ',P:-1,EQ:-1,CM:-1}', $0D"
+    
+    return 1
+}    
 
 // prints ip errors to diagnostics
 DEFINE_FUNCTION char[100] ipError (long err)
@@ -93,45 +152,49 @@ DEFINE_FUNCTION char[100] ipError (long err)
 } 
 
 DEFINE_START
+miyueIpOpen()
 
 // Define the backgroud music module with 'MIYUE'
-DEFINE_MODULE 'ModMiYue' uMod2 (dvMiYue, vdvMiYue)
+DEFINE_MODULE 'ModMiYue' uMod_MiYue (dvMiYue, vdvMiYue)
 
 DEFINE_EVENT
 
-BUTTON_EVENT[vdvTP, btnMiYue]
+BUTTON_EVENT[gDvTps, btnMiYue]
 {
     PUSH:
     {
         integer idxBtn
+        integer tpId
 
-        miyueIpOpen()   // wait here will make user unhappy
+        tpId   = get_last(gDvTps)
         idxBtn = get_last(btnMiYue)
+
         switch(idxBtn)
         {
-            case MIYUE_CMD_PLAY: // play|pause, now use only 1 button
-            case MIYUE_CMD_PAUSE:
+            case MIYUE_CMD_VOLDOWN:
             {
-                if ([vdvTP, BUTTON.INPUT.CHANNEL] == 0)
-                {
-                    SEND_LEVEL vdvMiYue, 1, MIYUE_CMD_PLAY
-                }
-                else
-                {
-                    SEND_LEVEL vdvMiYue, 1, MIYUE_CMD_PAUSE
-                }
-
-                [vdvTP, BUTTON.INPUT.CHANNEL] = ![vdvTP, BUTTON.INPUT.CHANNEL]
+                if (gblMYLevelValue[1] > 0) gblMYLevelValue[1]--
+                setBgMusicVol(gblMYLevelValue[1])
+                updateLevelValue(btnMYLevel[1], gblMYLevelValue[1])
+            }
+            case MIYUE_CMD_VOLUP:
+            {
+                if (gblMYLevelValue[1] <= MAX_MYLEVEL_VALUE) gblMYLevelValue[1]++
+                setBgMusicVol(gblMYLevelValue[1])
+                updateLevelValue(btnMYLevel[1], gblMYLevelValue[1])
+            }
+            case MIYUE_CMD_LINK:
+            {
+                gblMiyueConnStatus = 0
+                miyueIpOpen()
             }
             default:
-            {
-                SEND_LEVEL vdvMiYue, 1, idxBtn
-            }
+                bgMuicCommand(idxBtn)
         }
     }
 }
 
-BUTTON_EVENT[vdvTP, btnMYLevel]
+BUTTON_EVENT[gDvTps, btnMYLevel]
 {
     RELEASE:
     {
@@ -139,16 +202,19 @@ BUTTON_EVENT[vdvTP, btnMYLevel]
 
         i = get_last(btnMYLevel)
 
-        SEND_LEVEL vdvMiYue, 1, gblMYLevelValue[i]
+        debug('bgMusic', 4, "'BUTTON_EVENT: gblMYLevelValue[', itoa(i), '] = ', gblMYLevelValue[i]")
+        setBgMusicVol(gblMYLevelValue[i])
+        //SEND_LEVEL vdvMiYue, 1, gblMYLevelValue[i]
     }
 }
 
-LEVEL_EVENT[vdvTP, btnMYLevel]
+LEVEL_EVENT[gDvTps, btnMYLevel]
 {
     integer i;
     
     i = get_last(btnMYLevel)
     
+    debug('bgMusic', 4, "'LEVEL_EVENT: gblMYLevelValue[', itoa(i), '] = ', LEVEL.VALUE")
     gblMYLevelValue[i] = LEVEL.VALUE
 }
 
@@ -156,20 +222,29 @@ DATA_EVENT[dvMiYue]
 {
     ONLINE:
     {
-        gblMiyueConnStatus = TRUE
+        gblMiyueConnStatus = 1
         PULSE[vdvMiYue, MIYUE_CMD_RESET]    // initialize the device
-        SEND_STRING 0,"'***TRACE*** IP CONNECTION ESTABLISHED'"
-        SEND_COMMAND vdvTP, "'^TXT-', itoa(ADCODE_STS_MIYUELINK), ',0,ONLINE'"
+        debug('bgMusic', 4, "'***TRACE*** IP CONNECTION ESTABLISHED'")
+        SEND_COMMAND gDvTps, "'^TXT-', itoa(ADCODE_STS_MIYUELINK), ',0,ONLINE'"
     }
     OFFLINE:
     {
-        gblMiyueConnStatus = FALSE
-        SEND_STRING 0,"'***TRACE*** IP CONNECTION TERMINATED'"
-        SEND_COMMAND vdvTP, "'^TXT-', itoa(ADCODE_STS_MIYUELINK), ',0,OFFLINE'"
+        gblMiyueConnStatus = 0
+        debug('bgMusic', 4, "'***TRACE*** IP CONNECTION TERMINATED'")
+        SEND_COMMAND gDvTps, "'^TXT-', itoa(ADCODE_STS_MIYUELINK), ',0,OFFLINE'"
+        wait 300 miyueIpOpen()
     }
     ONERROR:
     {
-        SEND_STRING 0,"'***TRACE*** IP CONNECTION ERROR'"
-        SEND_STRING dvTerminal, ipError(DATA.NUMBER)        
+        gblMiyueConnStatus = 0
+        debug('bgMusic', 4, "ipError(DATA.NUMBER)")
+
+        switch(DATA.NUMBER)
+        {
+            case 14:
+                miyueIpClose()
+        }
+
+        wait 300 miyueIpOpen()
     }
 }

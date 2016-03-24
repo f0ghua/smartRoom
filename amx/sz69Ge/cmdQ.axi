@@ -47,7 +47,10 @@ DEFINE_DEVICE
 (*               CONSTANT DEFINITIONS GO BELOW             *)
 (***********************************************************)
 DEFINE_CONSTANT //fnQueueTheCommand, fnSendtheCommand
-INTEGER TL_Queue = 1
+INTEGER TL_Queue = 101
+
+MAX_CMD_SIZE  = 64
+MAX_Q_LEN     = 64
 (***********************************************************)
 (*              DATA TYPE DEFINITIONS GO BELOW             *)
 (***********************************************************)
@@ -56,14 +59,14 @@ DEFINE_TYPE
 STRUCTURE _sCmdQueue
 {
   DEV   dvSendtoDevice
-  CHAR  cCmdtoSend[50]
+  CHAR  cCmdtoSend[MAX_CMD_SIZE]
 }
 
 (***********************************************************)
 (*               VARIABLE DEFINITIONS GO BELOW             *)
 (***********************************************************)
 DEFINE_VARIABLE //fnQueueTheCommand, fnSendtheCommand
-_sCmdQueue _CmdQueue[50]  
+_sCmdQueue _CmdQueue[MAX_Q_LEN]  
 VOLATILE LONG nSendSpacing[1]=  {200} //Time between commands
 
 PERSISTENT INTEGER nCurrentQSendingPosition
@@ -86,12 +89,12 @@ DEFINE_MUTUALLY_EXCLUSIVE
 (***********************************************************)
 (* EXAMPLE: DEFINE_FUNCTION <RETURN_TYPE> <NAME> (<PARAMETERS>) *)
 (* EXAMPLE: DEFINE_CALL '<NAME>' (<PARAMETERS>) *)
-DEFINE_FUNCTION fnQueueTheCommand(DEV dvDevice,CHAR cMsg[50])
+DEFINE_FUNCTION fnQueueTheCommand(DEV dvDevice, CHAR cMsg[MAX_CMD_SIZE])
 {
   _CmdQueue[nCurrentQueueingPosition].dvSendtoDevice    =   dvDevice
   _CmdQueue[nCurrentQueueingPosition].cCmdtoSend        =   cMsg
   nCurrentQueueingPosition++
-  IF (nCurrentQueueingPosition>50)
+  IF (nCurrentQueueingPosition > MAX_Q_LEN)
      nCurrentQueueingPosition=1
   IF(!TIMELINE_ACTIVE(TL_Queue))
      TIMELINE_CREATE(TL_Queue, nSendSpacing, 1, TIMELINE_ABSOLUTE, TIMELINE_REPEAT)  
@@ -104,7 +107,7 @@ DEFINE_FUNCTION fnSendtheCommand()
   _CmdQueue[nCurrentQSendingPosition].dvSendtoDevice = 0:0:0    //Clear the Buffer
   _CmdQueue[nCurrentQSendingPosition].cCmdtoSend = "''"         //Clear the Buffer
   nCurrentQSendingPosition++
-  IF(nCurrentQSendingPosition>50)
+  IF(nCurrentQSendingPosition > MAX_Q_LEN)
      nCurrentQSendingPosition=1
   IF(nCurrentQSendingPosition==nCurrentQueueingPosition)    //If the current sending position is the same as the current queue position then the Queue is empty, kill the timeline
      TIMELINE_KILL (TL_Queue)
