@@ -37,17 +37,23 @@ DEFINE_FUNCTION updateDVDPowerState (integer pmState)
     }
 }
 
-DEFINE_FUNCTION dvdPowerOff(integer tpId)
+DEFINE_FUNCTION dvd_opPowerOn()
+{
+    send_string dvDVD, "'#', strDVDCode[BTN_DVD_POWERON], $0D"
+    gblDVDPowerState = POWER_MAN_ON
+}
+
+DEFINE_FUNCTION dvd_opPowerOff()
 {
     // to prevent from damaging the dvd, we should stop it first, then
     // poweroff
     //fnQueueTheCommand(dvPJ, "strDVDCode[BTN_DVD_STOP],$0D")
     //wait 50 fnQueueTheCommand(dvPJ, "strDVDCode[BTN_DVD_POWEROFF],$0D")
 
-    send_string dvDVD, "strDVDCode[BTN_DVD_STOP],$0D"
+    send_string dvDVD, "'#', strDVDCode[BTN_DVD_STOP], $0D"
     wait 50
     {
-        send_string dvDVD, "strDVDCode[BTN_DVD_POWEROFF],$0D"
+        send_string dvDVD, "'#', strDVDCode[BTN_DVD_POWEROFF], $0D"
     }
 
     gblDVDPowerState = POWER_MAN_OFF
@@ -79,29 +85,27 @@ BUTTON_EVENT[gDvTps, btnDVD]
         {
             case BTN_DVD_POWERON:
             {
-                send_string dvDVD, "strDVDCode[BTN_DVD_POWERON],$0D"
-                gblDVDPowerState = POWER_MAN_ON
+                dvd_opPowerOn()
             }
             case BTN_DVD_POWEROFF:
             {
-                send_string dvDVD, "strDVDCode[BTN_DVD_POWEROFF],$0D"
-                gblDVDPowerState = POWER_MAN_OFF
+                dvd_opPowerOff()
             }
             case BTN_DVD_PLAY:
             {
                 if (gblDvdPlayPauseSwitch)
                 {
-                    send_string dvDVD, "strDVDCode[BTN_DVD_PLAY],$0D"
+                    send_string dvDVD, "'#', strDVDCode[BTN_DVD_PLAY], $0D"
                     gblDvdPlayPauseSwitch = 1
                 }
                 else
                 {
-                    send_string dvDVD, "strDVDCode[BTN_DVD_PAUSE],$0D"
+                    send_string dvDVD, "'#', strDVDCode[BTN_DVD_PAUSE], $0D"
                     gblDvdPlayPauseSwitch = 0
                 }
             }
             default:
-                send_string dvDVD, "strDVDCode[idxBtn],$0D"
+                send_string dvDVD, "'#', strDVDCode[idxBtn], $0D"
         }
     }
 }

@@ -371,37 +371,38 @@ BUTTON_EVENT[gDvTps, btnScene]
                 // 3. light M2L1: after step 2 done, wait 5s, off
                 // 4. light dimmer: when step 2 done, dim to 50%;
                 
-                projector_opPowerOn()
-                //wait 10 send_string dvPJ, "'!', $89, $01, 'PW1', $0A" // resent to make sure device got the serial
+                projector_opPowerOn()                
 
                 fnLightOn(BTN_LIGHT_M2L7)
                 fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 30, 3)
 
-                wait 30 'GBL_SCENE_1_W1'
+                wait 30 'GBL_SCENE_L1_W1'
                 {
-                    do_push(gDvTps[tpId], btnDVD[BTN_DVD_POWERON])
-                    wait 10 send_string dvDVD, "'PON', $0D"
-
                     fnLightOff(BTN_LIGHT_M2L4)
                     fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 20, 5)
 
-                    wait 50 'GBL_SCENE_1_W2'
+                    wait 70 'GBL_SCENE_L1_W2'
                     {
-                        do_push(gDvTps[tpId], btnGF[BTN_GF_POWERON])
-
                         fnLightOff(BTN_LIGHT_M2L1)
                         fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 10, 5)
 
-                        wait 180 'GBL_SCENE_1_W3'
+                        wait 180 'GBL_SCENE_L1_W3'
                         {
                             fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 0, 5)
-                            wait 50
+                            wait 70
                             {
                                 // sync the dimmer level
                                 updateLevelValue(btnDimLevel[1], 0)
                             }
                         }
                     }
+                }
+
+                wait 19 'GBL_SCENE_D1_W1'
+                {
+                    gf_opPowerOn()  // 10s to send signal
+                    wait 15 'GBL_SCENE_D1_W2'
+                    dvd_opPowerOn() // 30s to start play
                 }
             }
             case BTN_GBL_SCENE_2:
@@ -448,8 +449,8 @@ BUTTON_EVENT[gDvTps, btnScene]
                 fnDimLevel(vdvAmxLight, AVBAO8_DIMMER_M1ADDRESS, 1, 90, 0)
                 updateLevelValue(btnDimLevel[1], 90)
 
-                do_push(gDvTps[tpId], btnGF[BTN_GF_POWEROFF])
-                dvdPowerOff(tpId)
+                gf_opPowerOff()
+                dvd_opPowerOff()
                 projector_opPowerOff()
                 /*
                 wait 10
@@ -487,6 +488,7 @@ TIMELINE_EVENT[TL_TP]
     tpsLightBtnSync()
     tpPJBtnSync()
     tpDVDBtnSync()
+    tpGFBtnSync()
 }
 
 (*****************************************************************)

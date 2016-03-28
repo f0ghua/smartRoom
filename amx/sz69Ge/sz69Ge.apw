@@ -160,8 +160,8 @@
 <FilePathName>LightModule.tko</FilePathName>
 <Comments>The AMX AVB-ABS module used to control the relay modules in our project</Comments>
 </File>
-<File CompileType="Netlinx" Type="TKO"><Identifier>ModMiYue</Identifier>
-<FilePathName>ModMiYue.tko</FilePathName>
+<File CompileType="Netlinx" Type="Module"><Identifier>module_miyue</Identifier>
+<FilePathName>module_miyue.axs</FilePathName>
 <Comments></Comments>
 </File>
 <File CompileType="Netlinx" Type="MasterSrc"><Identifier>sz69Ge</Identifier>

@@ -19,10 +19,35 @@ integer btnLMD[] = {
     2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 }
 
+DEFINE_VARIABLE
+
+integer gGfPowerState
+
 DEFINE_MUTUALLY_EXCLUSIVE
-([gDvTps, btnGF[BTN_GF_POWERON]], [gDvTps, btnGF[BTN_GF_POWEROFF]])
+//([gDvTps, btnGF[BTN_GF_POWERON]], [gDvTps, btnGF[BTN_GF_POWEROFF]])
 
 DEFINE_MODULE'ModGfIntegra' uMod_GF(dvGF, vdGF)
+
+DEFINE_FUNCTION gf_opPowerOn()
+{
+    send_string dvGF, "'!1PWR01', $0D"
+    gGfPowerState = POWER_MAN_ON
+}
+
+DEFINE_FUNCTION gf_opPowerOff()
+{
+    send_string dvGF, "'!1PWR00', $0D"
+    gGfPowerState = POWER_MAN_OFF
+}
+
+
+DEFINE_FUNCTION tpGFBtnSync()
+{
+    [gDvTps, btnGF[BTN_GF_POWERON]] = (gGfPowerState == POWER_MAN_ON)
+    [gDvTps, btnGF[BTN_GF_POWEROFF]] = (gGfPowerState == POWER_MAN_OFF)
+}
+
+DEFINE_START
 
 DEFINE_EVENT
 
@@ -32,9 +57,19 @@ BUTTON_EVENT[gDvTps, btnGF]
     {
         integer tpId
 
-        tpId   = get_last(gDvTps)        
-        tpArrayOn(BUTTON.INPUT.CHANNEL)
-        do_push(vdGF, GET_LAST(btnGF))
+        tpId   = get_last(gDvTps)
+        switch(get_last(btnGF))
+        {  
+            case BTN_GF_POWERON:
+                gf_opPowerOn()
+            case BTN_GF_POWEROFF:
+                gf_opPowerOff()
+            default:
+            {
+                tpArrayOn(button.input.channel)
+                do_push(vdGF, GET_LAST(btnGF))
+            }
+        }
     }
     HOLD[1, REPEAT]:
     {
@@ -57,7 +92,7 @@ BUTTON_EVENT[gDvTps, btnLMD]
         tpId = get_last(gDvTps)          
         for (i = length_array(btnLMD); i > 0; i--)
             tpArrayOff(btnLMD[i])
-        tpArrayOn(BUTTON.INPUT.CHANNEL)
+        tpArrayOn(button.input.channel)
         send_level vdGF, 1, GET_LAST(btnLMD)
     }
 }
@@ -71,7 +106,7 @@ BUTTON_EVENT[gDvTps, btnSLI]
         tpId = get_last(gDvTps)    
         for (i = length_array(btnSLI); i > 0; i--)       
             tpArrayOff(btnSLI[i])
-        tpArrayOn(BUTTON.INPUT.CHANNEL)
+        tpArrayOn(button.input.channel)
         send_level vdGF, 2, get_last(btnSLI)
     }
 }

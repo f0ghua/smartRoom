@@ -54,6 +54,7 @@ DEFINE_FUNCTION jvc_cmdInput(char input)
     //send_string dvPJ, "'!', $89, $01, 'IP6', $0A"
 }
 
+// PVC power on need about 30s
 DEFINE_FUNCTION projector_opPowerOn()
 {
     jvc_queryPower()
@@ -70,7 +71,7 @@ DEFINE_FUNCTION projector_opPowerOn()
                 // switch input to HDMI-1
                 // We need give enough time to wait the projector power on
                 // finish
-                wait 359 jvc_cmdInput(JVC_INPUT_HDMI_1)
+                //wait 359 jvc_cmdInput(JVC_INPUT_HDMI_1)
             }
             active(gPJPowerState == PJ_STATE_COOLING):
             {
@@ -81,6 +82,7 @@ DEFINE_FUNCTION projector_opPowerOn()
     }
 }
 
+// JVC need about 100s to poweroff(+cooling)
 DEFINE_FUNCTION projector_opPowerOff()
 {
     jvc_cmdPowerOff()
