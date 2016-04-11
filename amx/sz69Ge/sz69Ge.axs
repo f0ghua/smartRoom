@@ -141,6 +141,7 @@ DEFINE_VARIABLE
 
 volatile dev gDvTps[TP_MAX_PANELS] = {dvTP1, dvTP2}
 volatile integer gTpStatus[TP_MAX_PANELS]
+volatile integer gBtnScene1Lock, gBtnScene4Lock
 
 integer btnMenu[] = {
     2
@@ -177,6 +178,7 @@ DEFINE_MUTUALLY_EXCLUSIVE
 (* EXAMPLE: DEFINE_CALL '<NAME>' (<PARAMETERS>) *)
 
 //#include 'cmdQ.axi'   // be care of the timeline duplicate
+#include 'amx_tp_api.axi'
 #include 'debug.axi'
 #include 'ge69_light.axi'
 #include 'ge69_bgMusic.axi'
@@ -261,6 +263,9 @@ DEFINE_FUNCTION tpArrayToogleState (integer chan)
 (*                STARTUP CODE GOES BELOW                  *)
 (***********************************************************)
 DEFINE_START
+
+gBtnScene1Lock = false
+gBtnScene4Lock = false
 
 TIMELINE_CREATE(TL_TP, gTLTPSpacing, 1, TIMELINE_RELATIVE, TIMELINE_REPEAT)
 
@@ -350,6 +355,21 @@ BUTTON_EVENT[dvKeypad, btnKeypad]
                 updateLevelValue(btnMYLevel[1], gblMYLevelValue[1])    
         }        
     }
+    HOLD[2, REPEAT]:
+    {
+        integer idxKey
+        
+        idxKey = GET_LAST(btnKeypad)
+        switch (idxKey)
+        {        
+            case KP_DIRPB_RCLK:
+                setBgMusicVol(gblMYLevelValue[1])
+                updateLevelValue(btnMYLevel[1], gblMYLevelValue[1])
+            case KP_DIRPB_RCCLK:
+                setBgMusicVol(gblMYLevelValue[1])
+                updateLevelValue(btnMYLevel[1], gblMYLevelValue[1])    
+        }
+    }    
 }
 
 BUTTON_EVENT[gDvTps, btnScene]
@@ -370,7 +390,15 @@ BUTTON_EVENT[gDvTps, btnScene]
                 // 2. light M2L4: wait 3s, off
                 // 3. light M2L1: after step 2 done, wait 5s, off
                 // 4. light dimmer: when step 2 done, dim to 50%;
-                
+
+                if ((gBtnScene4Lock == true)||(gBtnScene1Lock == true))
+                    break
+
+                // disable the button so that no duplicate command send until process finish
+                setButtonEnabled(gDvTps[tpId], btnScene[BTN_GBL_SCENE_1], 0)
+                setButtonEnabled(gDvTps[tpId], btnScene[BTN_GBL_SCENE_4], 0)
+                gBtnScene1Lock = true
+
                 projector_opPowerOn()                
 
                 fnLightOn(BTN_LIGHT_M2L7)
@@ -403,6 +431,13 @@ BUTTON_EVENT[gDvTps, btnScene]
                     gf_opPowerOn()  // 10s to send signal
                     wait 15 'GBL_SCENE_D1_W2'
                     dvd_opPowerOn() // 30s to start play
+                }
+
+                wait 350 'W_PROJECTOR_POWER_DONE'
+                {
+                    setButtonEnabled(gDvTps[tpId], btnScene[BTN_GBL_SCENE_1], 1)
+                    setButtonEnabled(gDvTps[tpId], btnScene[BTN_GBL_SCENE_4], 1)
+                    gBtnScene1Lock = false
                 }
             }
             case BTN_GBL_SCENE_2:
@@ -442,6 +477,10 @@ BUTTON_EVENT[gDvTps, btnScene]
                 // 2. light M2L1: on
                 // 3. light M2L4: on
                 // 4. dimmer: 90%
+
+                if ((gBtnScene1Lock == true)||(gBtnScene4Lock == true))
+                    break
+
                 fnLightOn(BTN_LIGHT_M2L7)
                 fnLightOn(BTN_LIGHT_M2L1)
                 fnLightOn(BTN_LIGHT_M2L4)
@@ -452,6 +491,15 @@ BUTTON_EVENT[gDvTps, btnScene]
                 gf_opPowerOff()
                 dvd_opPowerOff()
                 projector_opPowerOff()
+
+                gBtnScene4Lock = true
+                setButtonEnabled(gDvTps[tpId], btnScene[BTN_GBL_SCENE_1], 0)
+
+                wait 1000 'W_PROJECTOR_POFF_DONE'
+                {
+                    gBtnScene4Lock = false
+                    setButtonEnabled(gDvTps[tpId], btnScene[BTN_GBL_SCENE_1], 1)
+                }
                 /*
                 wait 10
                 {

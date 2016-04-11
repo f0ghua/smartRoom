@@ -41,6 +41,8 @@ DEFINE_FUNCTION jvc_cmdPowerOn()
 DEFINE_FUNCTION jvc_cmdPowerOff()
 {
     sendString('JVC', dvPJ, "'!', $89, $01, 'PW0', $0A")
+    // send again to confirm
+    wait 50 sendString('JVC', dvPJ, "'!', $89, $01, 'PW0', $0A")
 }
 
 DEFINE_FUNCTION jvc_queryPower()
